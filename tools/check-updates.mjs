@@ -1,9 +1,11 @@
 #!/usr/bin/env node
-// check-updates.mjs — oh-story 双仓更新监听（零依赖，Node 18+）
+// check-updates.mjs — oh-story 上游更新监听（零依赖，Node 18+）
 //
-// 监测 qin1473692580-ux/oh-story-claudecode 与 worldwonderer/oh-story-claudecode：
-// 每仓查 releases/latest + main 最新 commit（共 4 请求/次；未认证限额 60/时，
-// 30 分钟一跑 = 8 请求/时，余量 7.5 倍）。
+// 监测三仓：qin1473692580-ux/oh-story-claudecode（基座增量来源）、
+//           zenstory-ai/oh-story-claudecode（官方线，曾用 worldwonderer，已重定向）、
+//           zenstory-ai/drama-skills（漫剧线，Phase 5）。
+// 每仓查 releases/latest + main 最新 commit（共 6 请求/次；未认证限额 60/时，
+// 30 分钟一跑 = 12 请求/时，余量 5 倍）。
 //
 // 用法：node check-updates.mjs
 // 退出码：0=无更新（含首次建基线）  1=有更新（stdout 打印通知，全文留档 last_notice）
@@ -29,7 +31,8 @@ const FETCH_TIMEOUT_MS = 8000;
 
 const REPOS = {
   qin: { owner: "qin1473692580-ux/oh-story-claudecode", label: "qin1473692580-ux/oh-story-claudecode" },
-  upstream: { owner: "worldwonderer/oh-story-claudecode", label: "worldwonderer/oh-story-claudecode" },
+  upstream: { owner: "zenstory-ai/oh-story-claudecode", label: "zenstory-ai/oh-story-claudecode（官方线，曾用地址 worldwonderer）" },
+  drama: { owner: "zenstory-ai/drama-skills", label: "zenstory-ai/drama-skills（漫剧线，Phase 5）" },
 };
 
 // ---------------------------------------------------------------------------

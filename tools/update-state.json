@@ -3,15 +3,20 @@
     "qin": {
       "lastTag": "v0.9.0",
       "lastSha": "18dd283",
-      "lastCheck": "2026-09-14T09:10:18.900Z"
+      "lastCheck": "2026-10-05T07:11:20.780Z"
     },
     "upstream": {
-      "lastTag": "v0.7.10",
-      "lastSha": "9b91465",
-      "lastCheck": "2026-09-14T09:10:20.136Z"
+      "lastTag": "v0.8.4",
+      "lastSha": "87f2e7e",
+      "lastCheck": "2026-10-05T07:11:21.566Z"
+    },
+    "drama": {
+      "lastTag": "v0.8.1",
+      "lastSha": "c2426e0",
+      "lastCheck": "2026-10-05T07:11:22.457Z"
     }
   },
-  "last_run": "2026-09-27T11:00:30.778Z",
-  "last_notice": "============================================\n!!! oh-story 上游有更新 !!!\n============================================\n仓库：qin1473692580-ux/oh-story-claudecode\n类型：新 Release\n版本：v0.7.10 -> v0.9.0\n时间：2026-09-01 17:19\n链接：https://github.com/qin1473692580-ux/oh-story-claudecode/releases/tag/v0.9.0\n--------------------------------------------\n本地处理：本部署为 TRAE 本地合并变体（local/trae 分支）,\n确认同步前不要自动 merge/rebase；同步流程见仓库 TRAE.md 第五节。\n============================================\n\n============================================\n!!! oh-story 上游有更新 !!!\n============================================\n仓库：worldwonderer/oh-story-claudecode\n类型：新 Release\n版本：v0.7.6 -> v0.7.10\n时间：2026-09-09 17:23\n链接：https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.7.10\n--------------------------------------------\n本地处理：本部署为 TRAE 本地合并变体（local/trae 分支）,\n确认同步前不要自动 merge/rebase；同步流程见仓库 TRAE.md 第五节。\n============================================",
-  "last_notice_at": "2026-09-14T09:10:01.620Z"
+  "last_run": "2026-10-05T07:11:22.469Z",
+  "last_notice": "============================================\n!!! oh-story 上游有更新 !!!\n============================================\n仓库：zenstory-ai/oh-story-claudecode（官方线，曾用地址 worldwonderer）\n类型：新 Release\n版本：v0.7.10 -> v0.8.4\n时间：2026-09-27 17:33\n链接：https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.8.4\n--------------------------------------------\n本地处理：本部署为 TRAE 本地合并变体（local/trae 分支）,\n确认同步前不要自动 merge/rebase；同步流程见仓库 TRAE.md 第五节。\n============================================",
+  "last_notice_at": "2026-10-05T07:11:22.469Z"
 }
