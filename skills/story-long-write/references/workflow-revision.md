@@ -86,7 +86,7 @@
 4. **节奏检查**：修改是否破坏了章节节奏
 5. **确定性语言复扫**：运行 `node scripts/check-degeneration.js --check --language=zh --fail-on=blocking 正文/第{X}章_*.md`；英文句段/裸英文词和其他 blocking 都只重写受影响句/段并复扫到 0，语言类 advisory 只有在用户/设定或白名单确认后才保留。
 
-> 完整检查清单见 [Phase 5：质量检查](../SKILL.md#phase-5质量检查)。
+> 完整检查清单见 [workflow-chapter.md 的「质量检查」节](workflow-chapter.md)。
 
 ---
 

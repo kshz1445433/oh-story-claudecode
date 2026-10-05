@@ -1,16 +1,17 @@
 #!/usr/bin/env node
 // setup-cdp-chrome.js
-// 准备带有 CDP（Chrome DevTools Protocol）调试功能的 Chrome 环境（跨平台）。
-// 通过此脚本，agent-browser 可以复用用户的 Chrome 登录态。
+// 准备带有 CDP（Chrome DevTools Protocol）调试功能的浏览器环境（Chrome / Edge，跨平台）。
+// 通过此脚本，agent-browser 可以复用用户的浏览器登录态。
 //
 // 用法:
 //   node setup-cdp-chrome.js [port] [options]
 //
 // Options:
 //   --detect-only            只探测当前状态（结构化输出），不做任何修改
-//   --yes                    确认杀死现有 Chrome，跳过交互提示
-//   --reset                  清空 ~/chrome-debug-profile 后重新复制
-//   --profile <name>         使用指定 Chrome profile（默认: Default）
+//   --yes                    确认杀死现有浏览器，跳过交互提示
+//   --reset                  清空 debug profile 后重新复制
+//   --profile <name>         使用指定浏览器 profile（默认: Default）
+//   --browser <kind>         chrome | edge | auto（默认 auto：优先 Chrome，未安装则用 Edge）
 //   --dry-run                打印将执行的操作，不实际执行
 //
 // 说明：CDP 端口已在监听时默认直接复用现有 Chrome 并退出 0；但传了 --reset 或显式
@@ -32,6 +33,7 @@
 //   CDP_STATUS=ready|needs-setup
 //   CDP_URL=...                    (仅当 ready)
 //   BROWSER=...                    (仅当 ready)
+//   BROWSER_KIND=chrome|edge       (选中的浏览器；两者都未安装时为 none)
 //   CHROME_RUNNING=yes|no
 //   CHROME_PID_COUNT=N             (仅当 CHROME_RUNNING=yes)
 
@@ -56,6 +58,7 @@ function parseArgs(argv) {
   // 而这两种情况在"CDP 已就绪"分支上的语义不同（复用 vs 按指定 profile 重建）
   let profileExplicit = false;
   let port = null;
+  let browser = "auto";
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -64,6 +67,13 @@ function parseArgs(argv) {
       case "--yes": case "-y": flags.yes = true; break;
       case "--detect-only": flags.detectOnly = true; break;
       case "--reset": flags.reset = true; break;
+      case "--browser":
+        browser = (argv[++i] || "").toLowerCase();
+        if (!["auto", "chrome", "edge"].includes(browser)) {
+          console.error(`❌ --browser 非法: ${browser}。必须是 chrome / edge / auto。`);
+          process.exit(1);
+        }
+        break;
       case "--profile":
         profile = argv[++i];
         if (!profile) {
@@ -89,7 +99,7 @@ function parseArgs(argv) {
     process.exit(1);
   }
 
-  return { flags, profile, profileExplicit, port };
+  return { flags, profile, profileExplicit, port, browser };
 }
 
 const ARGS = parseArgs(process.argv.slice(2));
@@ -97,78 +107,133 @@ const CDP_PORT = ARGS.port;
 const PLATFORM = os.platform();
 
 // ---------------------------------------------------------------------------
-// 平台配置映射
+// 平台 × 浏览器配置映射
+// 每个平台提供 browsers（chrome/edge 的纯数据差异）+ listPids/killAll（按平台实现）。
+// Edge 与 Chrome 同为 Chromium 内核：--remote-debugging-port 等启动参数完全通用，
+// 差异只在可执行路径、profile 目录、进程名三处。
 // ---------------------------------------------------------------------------
 
 const PLATFORM_CONFIG = {
   darwin: {
-    chromePaths: [
-      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    ],
-    profileDir: path.join(
-      os.homedir(),
-      "Library",
-      "Application Support",
-      "Google",
-      "Chrome"
-    ),
-    findChrome() {
-      for (const p of this.chromePaths) if (fs.existsSync(p)) return p;
-      return null;
+    browsers: {
+      chrome: {
+        displayName: "Google Chrome",
+        exePaths: [
+          "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        ],
+        procNames: ["Google Chrome"],
+        profileDir: path.join(
+          os.homedir(),
+          "Library",
+          "Application Support",
+          "Google",
+          "Chrome"
+        ),
+        debugProfileName: "chrome-debug-profile",
+      },
+      edge: {
+        displayName: "Microsoft Edge",
+        exePaths: [
+          "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+        ],
+        procNames: ["Microsoft Edge"],
+        profileDir: path.join(
+          os.homedir(),
+          "Library",
+          "Application Support",
+          "Microsoft Edge"
+        ),
+        debugProfileName: "edge-debug-profile",
+      },
     },
-    listChromePids() {
-      try {
-        const out = execSync("pgrep -x 'Google Chrome'", { encoding: "utf-8" }).trim();
-        return out.split("\n").map(Number).filter((n) => n > 0);
-      } catch { return []; }
+    listPids(procNames) {
+      const pids = new Set();
+      for (const name of procNames) {
+        try {
+          const out = execSync(`pgrep -x '${name}'`, { encoding: "utf-8" }).trim();
+          out.split("\n").map(Number).filter((n) => n > 0).forEach((n) => pids.add(n));
+        } catch {}
+      }
+      return [...pids];
     },
-    killChrome() {
-      try { execSync("pkill -9 -x 'Google Chrome'", { stdio: "ignore" }); } catch {}
+    killAll(procNames) {
+      for (const name of procNames) {
+        try { execSync(`pkill -9 -x '${name}'`, { stdio: "ignore" }); } catch {}
+      }
     },
   },
   win32: {
-    chromePaths: [
-      path.join(process.env["PROGRAMFILES(X86)"] || "", "Google", "Chrome", "Application", "chrome.exe"),
-      path.join(process.env.PROGRAMFILES || "", "Google", "Chrome", "Application", "chrome.exe"),
-      path.join(process.env.LOCALAPPDATA || "", "Google", "Chrome", "Application", "chrome.exe"),
-    ],
-    profileDir: path.join(
-      process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local"),
-      "Google", "Chrome", "User Data"
-    ),
-    findChrome() {
-      for (const p of this.chromePaths) if (p && fs.existsSync(p)) return p;
-      return null;
+    browsers: {
+      chrome: {
+        displayName: "Google Chrome",
+        exePaths: [
+          path.join(process.env["PROGRAMFILES(X86)"] || "", "Google", "Chrome", "Application", "chrome.exe"),
+          path.join(process.env.PROGRAMFILES || "", "Google", "Chrome", "Application", "chrome.exe"),
+          path.join(process.env.LOCALAPPDATA || "", "Google", "Chrome", "Application", "chrome.exe"),
+        ],
+        imageName: "chrome.exe",
+        profileDir: path.join(
+          process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local"),
+          "Google", "Chrome", "User Data"
+        ),
+        debugProfileName: "chrome-debug-profile",
+      },
+      edge: {
+        displayName: "Microsoft Edge",
+        exePaths: [
+          path.join(process.env["PROGRAMFILES(X86)"] || "", "Microsoft", "Edge", "Application", "msedge.exe"),
+          path.join(process.env.PROGRAMFILES || "", "Microsoft", "Edge", "Application", "msedge.exe"),
+        ],
+        imageName: "msedge.exe",
+        profileDir: path.join(
+          process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local"),
+          "Microsoft", "Edge", "User Data"
+        ),
+        debugProfileName: "edge-debug-profile",
+      },
     },
-    listChromePids() {
+    // tasklist/taskkill 的 IMAGENAME 是精确匹配：msedge.exe 不会波及 msedgewebview2.exe
+    // （Outlook/Teams 等应用内嵌的 WebView2 运行时），Edge 模式也不会动 chrome.exe，反之亦然。
+    listPids(imageName) {
       try {
-        const out = execSync('tasklist /FI "IMAGENAME eq chrome.exe" /NH /FO CSV', { encoding: "utf-8" }).trim();
+        const out = execSync(`tasklist /FI "IMAGENAME eq ${imageName}" /NH /FO CSV`, { encoding: "utf-8" }).trim();
         return out.split("\n").map((line) => {
-          const m = line.match(/"chrome.exe","(\d+)"/i);
+          const m = line.match(new RegExp(`"${imageName}","(\\d+)"`, "i"));
           return m ? parseInt(m[1], 10) : 0;
         }).filter((n) => n > 0);
       } catch { return []; }
     },
-    killChrome() {
-      try { execSync("taskkill /F /IM chrome.exe", { stdio: "ignore" }); } catch {}
+    killAll(imageName) {
+      try { execSync(`taskkill /F /IM ${imageName}`, { stdio: "ignore" }); } catch {}
     },
   },
   linux: {
-    chromePaths: [
-      "/usr/bin/google-chrome-stable",
-      "/usr/bin/google-chrome",
-      "/opt/google/chrome/google-chrome",
-    ],
-    profileDir: path.join(os.homedir(), ".config", "google-chrome"),
-    findChrome() {
-      for (const p of this.chromePaths) if (fs.existsSync(p)) return p;
-      return null;
+    browsers: {
+      chrome: {
+        displayName: "Google Chrome",
+        exePaths: [
+          "/usr/bin/google-chrome-stable",
+          "/usr/bin/google-chrome",
+          "/opt/google/chrome/google-chrome",
+        ],
+        procNames: ["google-chrome-stable", "google-chrome", "chrome"],
+        profileDir: path.join(os.homedir(), ".config", "google-chrome"),
+        debugProfileName: "chrome-debug-profile",
+      },
+      edge: {
+        displayName: "Microsoft Edge",
+        exePaths: [
+          "/usr/bin/microsoft-edge",
+          "/usr/bin/microsoft-edge-stable",
+        ],
+        procNames: ["microsoft-edge", "microsoft-edge-stable"],
+        profileDir: path.join(os.homedir(), ".config", "microsoft-edge"),
+        debugProfileName: "edge-debug-profile",
+      },
     },
-    listChromePids() {
-      // 覆盖常见的 Chrome 进程命名
-      const patterns = ["google-chrome-stable", "google-chrome", "chrome"];
+    listPids(procNames) {
       const pids = new Set();
-      for (const pat of patterns) {
+      for (const pat of procNames) {
         try {
           const out = execSync(`pgrep -x ${pat}`, { encoding: "utf-8" }).trim();
           out.split("\n").map(Number).filter((n) => n > 0).forEach((n) => pids.add(n));
@@ -176,8 +241,8 @@ const PLATFORM_CONFIG = {
       }
       return [...pids];
     },
-    killChrome() {
-      for (const pat of ["google-chrome-stable", "google-chrome", "chrome"]) {
+    killAll(procNames) {
+      for (const pat of procNames) {
         try { execSync(`pkill -9 -x ${pat}`, { stdio: "ignore" }); } catch {}
       }
     },
@@ -193,13 +258,52 @@ function warn(msg) { console.warn("⚠️  " + msg); }
 function ok(msg) { console.log("✅ " + msg); }
 function err(msg) { console.error("❌ " + msg); }
 
-function getConfig() {
-  const config = PLATFORM_CONFIG[PLATFORM];
-  if (!config) {
+function getConfig({ allowNone = false } = {}) {
+  const platform = PLATFORM_CONFIG[PLATFORM];
+  if (!platform) {
     err(`不支持的平台: ${PLATFORM}。支持 darwin/win32/linux。`);
     process.exit(1);
   }
-  return config;
+  // auto：优先 Chrome（保持既有用户行为不变），未安装 Chrome 再用 Edge；显式指定则只用指定的
+  const order = ARGS.browser === "auto" ? ["chrome", "edge"] : [ARGS.browser];
+  let kind = null;
+  let browser = null;
+  for (const k of order) {
+    const cand = platform.browsers[k];
+    if (!cand) continue;
+    if (cand.exePaths.some((p) => p && fs.existsSync(p))) {
+      kind = k;
+      browser = cand;
+      break;
+    }
+  }
+  if (!browser) {
+    if (allowNone) return null;
+    err(`未找到可用的 ${ARGS.browser === "auto" ? "Chrome / Edge" : ARGS.browser} 安装。`);
+    process.exit(1);
+  }
+  return {
+    kind,
+    displayName: browser.displayName,
+    debugProfileName: browser.debugProfileName,
+    chromePaths: browser.exePaths,
+    profileDir: browser.profileDir,
+    findChrome() {
+      for (const p of browser.exePaths) if (p && fs.existsSync(p)) return p;
+      return null;
+    },
+    // 进程枚举/清理只作用于选中浏览器的映像名，绝不跨浏览器连坐
+    listChromePids() {
+      return platform.listPids(
+        PLATFORM === "win32" ? browser.imageName : browser.procNames
+      );
+    },
+    killChrome() {
+      platform.killAll(
+        PLATFORM === "win32" ? browser.imageName : browser.procNames
+      );
+    },
+  };
 }
 
 /** 同步等待 ms 毫秒（不依赖 setTimeout / 系统 sleep） */
@@ -321,7 +425,8 @@ function queryStdout(cmd) {
     const out = execSync(cmd, {
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "ignore"],
-      timeout: 5000,
+      // 15s：刚复制完大 profile 时磁盘/杀软饱和，CIM 查询空闲都要 2s，5s 会把慢机器误判成工具缺失
+      timeout: 15000,
       maxBuffer: 8 * 1024 * 1024,
     });
     return typeof out === "string" ? out : String(out);
@@ -339,6 +444,9 @@ function listPortListenerPids(port) {
   const queries =
     PLATFORM === "win32"
       ? [
+          // netstat 最快最稳（~100ms），PowerShell Get-NetTCPConnection 空闲都要 ~2s；
+          // 解析只认「TCP + foreign port 0 + 尾列 pid」的稳定形状，不吃本地化文字
+          { kind: "netstat", cmd: "netstat -ano -p tcp" },
           {
             kind: "pid",
             cmd: `powershell -NoProfile -NonInteractive -Command "Get-NetTCPConnection -State Listen -LocalPort ${port} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess"`,
@@ -347,7 +455,6 @@ function listPortListenerPids(port) {
             kind: "pid",
             cmd: `pwsh -NoProfile -NonInteractive -Command "Get-NetTCPConnection -State Listen -LocalPort ${port} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess"`,
           },
-          { kind: "netstat", cmd: "netstat -ano -p tcp" },
         ]
       : [
           { kind: "pid", cmd: `lsof -nP -iTCP:${port} -sTCP:LISTEN -t` },
@@ -480,7 +587,7 @@ function commandLineHasArgument(commandLine, argument) {
  *      我们配出来的那个实例，而不是树里某个别的进程顺手占了这个端口。
  * 任何一步查不出来都返回 unverifiable：宁可硬失败，也不能把「证明不了」当成「证明了」。
  */
-function verifyPortOwnedByLaunch(port, rootPid) {
+function verifyPortOwnedByLaunch(port, rootPid, browserName = "Chrome") {
   const fail = (code, lines) => ({ ok: false, code, lines: [`${code}: ${lines[0]}`, ...lines.slice(1)] });
   const unverifiable = (why) =>
     fail("CDP_OWNER_UNVERIFIABLE", [
@@ -489,7 +596,7 @@ function verifyPortOwnedByLaunch(port, rootPid) {
       PLATFORM === "win32"
         ? "本机需要 netstat 加 wmic 或 PowerShell 才能查进程归属。"
         : "本机需要 lsof（或 ss / fuser）加 ps 才能查进程归属。",
-      `处理办法：装上上述工具后重跑，或手动确认 ${port} 上跑的确实是刚启动的 Chrome。`,
+      `处理办法：装上上述工具后重跑，或手动确认 ${port} 上跑的确实是刚启动的 ${browserName}。`,
     ]);
 
   if (!rootPid) return unverifiable("spawn 没拿到 pid");
@@ -684,9 +791,11 @@ async function runDetectOnly(config) {
       const obj = JSON.parse(version);
       if (obj.Browser) log(`BROWSER=${obj.Browser}`);
     } catch {}
+    log(`BROWSER_KIND=${config.kind}`);
     process.exit(0);
   }
   log("CDP_STATUS=needs-setup");
+  log(`BROWSER_KIND=${config.kind}`);
   const pids = config.listChromePids();
   if (pids.length > 0) {
     log("CHROME_RUNNING=yes");
@@ -701,20 +810,20 @@ async function runDetectOnly(config) {
 // 同意流程：返回 true 继续，false 用户拒绝
 // ---------------------------------------------------------------------------
 
-async function ensureConsentToKill(pids) {
+async function ensureConsentToKill(pids, config) {
   if (pids.length === 0) return true;
   if (ARGS.flags.yes) return true;
 
   // 非 TTY：拒绝静默杀进程，给调用方（Claude / 上层脚本）一个明确信号
   if (!process.stdin.isTTY) {
-    err(`NEEDS_CONSENT: ${pids.length} running Chrome process(es) will be killed.`);
-    err(`Pass --yes to confirm (after asking the user), or stop Chrome manually first.`);
+    err(`NEEDS_CONSENT: ${pids.length} running ${config.displayName} process(es) will be killed.`);
+    err(`Pass --yes to confirm (after asking the user), or stop ${config.displayName} manually first.`);
     process.exit(3);
   }
 
   // TTY：交互问询
-  warn(`检测到 ${pids.length} 个正在运行的 Chrome 进程。`);
-  warn("继续将杀死它们，你在常规 Chrome 中未保存的工作可能丢失。");
+  warn(`检测到 ${pids.length} 个正在运行的 ${config.displayName} 进程。`);
+  warn(`继续将杀死它们，你在常规 ${config.displayName} 中未保存的工作可能丢失（${config.kind === "edge" ? "Edge 重启后一般可恢复标签页" : "浏览器重启后一般可恢复标签页"}）。`);
   return promptYesNo("继续？[y/N] ");
 }
 
@@ -723,31 +832,35 @@ async function ensureConsentToKill(pids) {
 // ---------------------------------------------------------------------------
 
 async function main() {
-  const config = getConfig();
-  const debugProfile = path.join(os.homedir(), "chrome-debug-profile");
+  // detect-only 在「两种浏览器都没装」时仍要输出结构化结果，不硬退
+  const config = getConfig({ allowNone: ARGS.flags.detectOnly });
+  const debugProfile = config
+    ? path.join(os.homedir(), config.debugProfileName)
+    : null;
 
-  // 1) 检测 Chrome 可执行路径（detect-only 也需要 profileDir）
-  const chromePath = config.findChrome();
+  // 1) 检测浏览器可执行路径（detect-only 也需要 profileDir）
+  const chromePath = config ? config.findChrome() : null;
 
   // detect-only：不修改任何状态
   if (ARGS.flags.detectOnly) {
     if (!chromePath) {
       log("CDP_STATUS=needs-setup");
+      log("BROWSER_KIND=none");
       log("CHROME_INSTALLED=no");
       process.exit(0);
     }
     return runDetectOnly(config);
   }
 
-  log("=== CDP Chrome 环境准备 ===");
-  log(`平台: ${PLATFORM} | CDP 端口: ${CDP_PORT} | profile: ${ARGS.profile}`);
+  log("=== CDP 浏览器环境准备 ===");
+  log(`平台: ${PLATFORM} | 浏览器: ${config.displayName} | CDP 端口: ${CDP_PORT} | profile: ${ARGS.profile}`);
 
   if (!chromePath) {
-    err("未找到 Google Chrome。请确保已安装。");
+    err(`未找到 ${config.displayName}。请确保已安装。`);
     err(`搜索路径: ${JSON.stringify(config.chromePaths, null, 2)}`);
     process.exit(1);
   }
-  log(`Chrome 路径: ${chromePath}`);
+  log(`${config.displayName} 路径: ${chromePath}`);
 
   // 2) dry-run：先于任何副作用（包括"复用现有 CDP"）打印计划，让用户能看到真要执行时的步骤
   const defaultProfile = path.join(config.profileDir, ARGS.profile);
@@ -765,10 +878,10 @@ async function main() {
       : willReuse
         ? "已就绪（实际运行时会直接复用）"
         : "已就绪（但传了 --reset/--profile，实际运行会重建，不复用）";
-    log(`Chrome profile: ${defaultProfile} (${hasProfile ? "存在" : "不存在"})`);
+    log(`${config.displayName} profile: ${defaultProfile} (${hasProfile ? "存在" : "不存在"})`);
     log(`CDP 端口 ${CDP_PORT}: ${cdpNote}`);
     const runningPids = config.listChromePids();
-    log(`检测到 ${runningPids.length} 个 Chrome 进程`);
+    log(`检测到 ${runningPids.length} 个 ${config.displayName} 进程`);
     log("\n--- dry-run 模式：只打印操作，不执行 ---");
     if (willReuse) {
       log("0. CDP 已就绪，实际运行会直接复用并退出 0（以下步骤仅供参考）");
@@ -779,9 +892,9 @@ async function main() {
     let stepNo = 0;
     const step = (msg) => log(`${++stepNo}. ${msg}`);
     if (runningPids.length > 0) {
-      step(`${ARGS.flags.yes ? "（已同意）" : "请求同意后 "}杀死 ${runningPids.length} 个 Chrome 进程`);
+      step(`${ARGS.flags.yes ? "（已同意）" : "请求同意后 "}杀死 ${runningPids.length} 个 ${config.displayName} 进程`);
     } else {
-      step("无 Chrome 进程，无需杀死");
+      step(`无 ${config.displayName} 进程，无需杀死`);
     }
     step(`用 TCP 确认端口 ${CDP_PORT} 已释放（任何监听仍在都中止：不删 profile、不启动）`);
     if (ARGS.flags.reset) step(`删除 ${debugProfile}`);
@@ -791,7 +904,7 @@ async function main() {
       step("⚠️ 无用户 profile，将以空 profile 启动");
     }
     step("清理 SingletonLock / SingletonCookie / SingletonSocket");
-    step("启动 Chrome（含 --remote-allow-origins=*, --no-first-run 等）");
+    step(`启动 ${config.displayName}（含 --remote-allow-origins=*, --no-first-run 等）`);
     step(
       `验证 http://127.0.0.1:${CDP_PORT}/json/version 来自本次启动的实例` +
         "（身份取得到且已变 + 进程存活 + 端口的 LISTEN 持有者就在这棵进程树里）"
@@ -808,46 +921,46 @@ async function main() {
   const portWasListening = await probeTcp(CDP_PORT);
   if (existing) {
     if (!ARGS.flags.reset && !ARGS.profileExplicit) {
-      ok("CDP 已就绪，复用现有 Chrome。");
+      ok(`CDP 已就绪，复用现有实例（浏览器由既有 CDP 端点决定，不受 --browser 影响）。`);
       log(existing.split("\n").slice(0, 5).join("\n"));
       process.exit(0);
     }
     const requested = ARGS.flags.reset ? "--reset" : `--profile ${ARGS.profile}`;
-    warn(`CDP 端口 ${CDP_PORT} 已在监听，但传了 ${requested}：不复用，将关闭现有 Chrome 后重建 debug profile。`);
+    warn(`CDP 端口 ${CDP_PORT} 已在监听，但传了 ${requested}：不复用，将关闭现有 ${config.displayName} 后重建 debug profile。`);
   }
   // 重建前那个实例的身份：第 10 步要靠它证明「应答的是新起的实例」，而不只是「有人应答」
   const staleIdentity = cdpIdentity(existing);
 
   if (!hasProfile) {
-    err(`未找到 Chrome profile: ${defaultProfile}`);
-    err("请确保已安装 Google Chrome 并至少使用过一次，或用 --profile <name> 指定其他 profile。");
+    err(`未找到 ${config.displayName} profile: ${defaultProfile}`);
+    err(`请确保已安装 ${config.displayName} 并至少使用过一次，或用 --profile <name> 指定其他 profile。`);
     process.exit(1);
   }
 
-  // 4) 同意流程：如有 Chrome 进程要杀，先征得同意
+  // 4) 同意流程：如有浏览器进程要杀，先征得同意
   const runningPids = config.listChromePids();
-  const consented = await ensureConsentToKill(runningPids);
+  const consented = await ensureConsentToKill(runningPids, config);
   if (!consented) {
     err("用户拒绝，已中止。");
     process.exit(2);
   }
 
-  // 5) 杀死现有 Chrome 进程，等待退出
+  // 5) 杀死现有浏览器进程，等待退出
   if (runningPids.length > 0) {
-    log(`正在停止 ${runningPids.length} 个 Chrome 进程...`);
+    log(`正在停止 ${runningPids.length} 个 ${config.displayName} 进程...`);
     config.killChrome();
     if (!waitForChromeExit(config, 6000)) {
-      warn("首轮 kill 后仍有 Chrome 进程，再试一次...");
+      warn(`首轮 kill 后仍有 ${config.displayName} 进程，再试一次...`);
       config.killChrome();
       waitForChromeExit(config, 4000);
     }
     const remain = config.listChromePids();
     if (remain.length > 0) {
-      err(`仍有 ${remain.length} 个 Chrome 进程未退出，已中止。`);
-      err("未删除、未改动 debug profile，也未启动新 Chrome——状态保持原样。");
+      err(`仍有 ${remain.length} 个 ${config.displayName} 进程未退出，已中止。`);
+      err(`未删除、未改动 debug profile，也未启动新 ${config.displayName}——状态保持原样。`);
       process.exit(1);
     } else {
-      ok("Chrome 已退出。");
+      ok(`${config.displayName} 已退出。`);
     }
   }
 
@@ -867,15 +980,15 @@ async function main() {
         : `CDP 端口 ${CDP_PORT} 仍被占用、未释放，已中止。`
     );
     if (remain.length > 0) {
-      err(`原因：${remain.length} 个 Chrome 进程没能退出（kill 无效，可能权限不足或进程卡死）。`);
+      err(`原因：${remain.length} 个 ${config.displayName} 进程没能退出（kill 无效，可能权限不足或进程卡死）。`);
     } else if (runningPids.length === 0) {
-      err("原因：端口被无法识别的进程占用——没找到任何 Chrome 进程，脚本无从关闭它。");
+      err(`原因：端口被无法识别的进程占用——没找到任何 ${config.displayName} 进程，脚本无从关闭它。`);
     } else {
-      err("原因：Chrome 进程已退出，但另有进程仍守着这个端口。");
+      err(`原因：${config.displayName} 进程已退出，但另有进程仍守着这个端口。`);
     }
     const holder = describePortHolder(CDP_PORT);
     if (holder) err(`占用者：${holder}`);
-    err("未删除、未改动 debug profile，也未启动新 Chrome——状态保持原样。");
+    err(`未删除、未改动 debug profile，也未启动新 ${config.displayName}——状态保持原样。`);
     err(`处理办法：手动结束占用 ${CDP_PORT} 的进程后重跑，或换一个端口（node setup-cdp-chrome.js <其他端口> ...）。`);
     process.exit(1);
   }
@@ -892,7 +1005,7 @@ async function main() {
   // 7) 复制 / 刷新 profile（此时 Chrome 已关闭，SQLite 一致）
   const debugDefault = path.join(debugProfile, "Default");
   if (!fs.existsSync(debugDefault)) {
-    log("正在复制 Chrome profile 到 debug 目录...");
+    log(`正在复制 ${config.displayName} profile 到 debug 目录...`);
     fs.mkdirSync(debugProfile, { recursive: true });
     try { fs.chmodSync(debugProfile, 0o700); } catch {}
     copyDirRecursive(defaultProfile, debugDefault);
@@ -907,8 +1020,8 @@ async function main() {
   // 8) 清理 singleton 锁
   clearSingletonLocks(debugProfile);
 
-  // 9) 以 CDP 模式启动 Chrome
-  log(`正在以 CDP 模式启动 Chrome（端口 ${CDP_PORT}）...`);
+  // 9) 以 CDP 模式启动浏览器
+  log(`正在以 CDP 模式启动 ${config.displayName}（端口 ${CDP_PORT}）...`);
   const chromeArgs = [
     `--remote-debugging-port=${CDP_PORT}`,
     `--user-data-dir=${debugProfile}`,
@@ -926,7 +1039,7 @@ async function main() {
   /** 启动后验证没过：只清掉自己刚起的进程（端口上那个不是我们的，不该连坐杀别人的 Chrome） */
   function abortAfterLaunch(reasons) {
     for (const line of reasons) err(line);
-    err("正在清理刚启动的 Chrome 进程...");
+    err(`正在清理刚启动的 ${config.displayName} 进程...`);
     terminateLaunchTree(childPid);
     process.exit(1);
   }
@@ -939,12 +1052,14 @@ async function main() {
   //     ④ 端口的 LISTEN 持有者确实在这棵 spawn 出来的进程树里，且带着本次的
   //        --remote-debugging-port。前三条都是间接证据——「旧端点消失过 + 身份变了 +
   //        launcher 还活着」推不出「端口归它」，只有第 ④ 条才真的把端口和进程绑上。
-  log("等待 Chrome 启动...");
+  log(`等待 ${config.displayName} 启动...`);
   let identityMisses = 0;
-  for (let i = 1; i <= 15; i++) {
+  // 30×2s=60s：大 profile 首次启动可能被杀软扫描拖慢，30s 窗口太紧；
+  // 超时的代价是清理并报错，多等 30s 无副作用
+  for (let i = 1; i <= 30; i++) {
     sleepSync(2000);
     if (spawnError) {
-      abortAfterLaunch([`启动 Chrome 失败: ${spawnError.message}`]);
+      abortAfterLaunch([`启动 ${config.displayName} 失败: ${spawnError.message}`]);
     }
     const version = await probeCDP(CDP_PORT);
     if (version) {
@@ -958,45 +1073,61 @@ async function main() {
         abortAfterLaunch([
           `CDP_IDENTITY_UNVERIFIABLE: 端口 ${CDP_PORT} 有 HTTP 应答，但 /json/version 里取不到实例身份（webSocketDebuggerUrl）。`,
           "拒绝报成功：身份取不到就无法证明这是新起的实例——按合约它既不算相同也不算不同，只能当作没证出来。",
-          `处理办法：确认 ${CDP_PORT} 上跑的是 Chrome 的 CDP 端点（而不是别的 HTTP 服务），或换一个端口重跑。`,
+          `处理办法：确认 ${CDP_PORT} 上跑的是 ${config.displayName} 的 CDP 端点（而不是别的 HTTP 服务），或换一个端口重跑。`,
         ]);
       }
       if (staleIdentity && identity === staleIdentity) {
         abortAfterLaunch([
-          `端口 ${CDP_PORT} 应答的仍是重建前那个实例（${identity}），不是新启动的 Chrome。`,
+          `端口 ${CDP_PORT} 应答的仍是重建前那个实例（${identity}），不是新启动的 ${config.displayName}。`,
           "拒绝报成功：再往下用，每一次采集读到的都会是旧会话。",
         ]);
       }
       if (!isChildAlive(child)) {
         const holder = describePortHolder(CDP_PORT);
         abortAfterLaunch([
-          `端口 ${CDP_PORT} 上有 CDP 应答，但刚启动的 Chrome（pid ${childPid}）已经退出。`,
+          `端口 ${CDP_PORT} 上有 CDP 应答，但刚启动的 ${config.displayName}（pid ${childPid}）已经退出。`,
           "拒绝报成功：这个端点不属于本次启动的实例。",
           ...(holder ? [`占用者：${holder}`] : []),
           `处理办法：确认 ${CDP_PORT} 没被别的进程占用，或换一个端口重跑。`,
         ]);
       }
-      const owner = verifyPortOwnedByLaunch(CDP_PORT, childPid);
+      const owner = verifyPortOwnedByLaunch(CDP_PORT, childPid, config.displayName);
       if (!owner.ok) abortAfterLaunch(owner.lines);
-      ok(`Chrome 已成功以 CDP 模式启动（端口 ${CDP_PORT}）`);
+      ok(`${config.displayName} 已成功以 CDP 模式启动（端口 ${CDP_PORT}）`);
       log(version.split("\n").slice(0, 5).join("\n"));
       process.exit(0);
     }
-    log(`   尝试 ${i}/15...`);
+    log(`   尝试 ${i}/30...`);
   }
 
-  // 11) 失败清理：杀死刚才启动的孤儿 Chrome
-  err("30 秒内未能启动 Chrome CDP 环境。");
-  err("正在清理刚启动的 Chrome 进程...");
+  // 11) 失败清理：杀死刚才启动的孤儿浏览器
+  err(`60 秒内未能启动 ${config.displayName} CDP 环境。`);
+  err(`正在清理刚启动的 ${config.displayName} 进程...`);
   terminateLaunchTree(childPid);
   err("可能原因：");
-  err("  - Chrome 不支持 --remote-debugging-port");
+  err(`  - ${config.displayName} 不支持 --remote-debugging-port`);
   err(`  - 端口 ${CDP_PORT} 已被其他进程占用`);
   err("  - debug profile 目录已损坏（试试 --reset）");
+  err("  - 刚复制过大 profile，杀软/磁盘饱和拖慢了启动（稍等片刻重跑一次通常即可）");
+  err(`提示：你的日常 ${config.displayName} 窗口在准备阶段已被关闭，现在可手动重新打开；`);
+  err(`      重跑本脚本会重新走「关闭→复制登录态→带调试端口启动」流程。`);
   process.exit(1);
 }
 
-main().catch((e) => {
-  err(`启动失败: ${e.message}`);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((e) => {
+    err(`启动失败: ${e.message}`);
+    process.exit(1);
+  });
+}
+
+// 供工具化测试与外部复用；直接运行行为不变
+module.exports = {
+  verifyPortOwnedByLaunch,
+  listPortListenerPids,
+  listProcessParents,
+  processCommandLine,
+  isInProcessTree,
+  probeCDP,
+  cdpIdentity,
+};

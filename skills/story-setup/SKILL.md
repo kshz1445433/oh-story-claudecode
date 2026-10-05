@@ -1,7 +1,7 @@
 ---
 name: story-setup
 version: 1.2.12
-description: "网文写作工具集基础设施部署。为 Claude Code / OpenCode / Codex / ZCode / OpenClaw / Reasonix 提供内置适配；Web AI / 通用 Agent 可走 skills + AGENTS.md 文件模式。触发方式：/story-setup、$story-setup、「准备写书」「帮我搭一下环境」「配置写作项目」。"
+description: "网文写作工具集基础设施部署。为 Claude Code / OpenCode / Codex / ZCode / OpenClaw / Reasonix / TRAE 提供内置适配；TRAE 与 Web AI / 通用 Agent 走 skills + AGENTS.md 文件模式（TRAE 额外写 .trae/rules/oh-story.md 与项目根 README.md）。触发方式：/story-setup、$story-setup、「准备写书」「帮我搭一下环境」「配置写作项目」。"
 metadata: {"openclaw":{"source":"https://github.com/qin1473692580-ux/oh-story-claudecode"}}
 ---
 # story-setup：网文写作工具集基础设施部署
@@ -47,13 +47,13 @@ metadata: {"openclaw":{"source":"https://github.com/qin1473692580-ux/oh-story-cl
 9. 检查 `.reasonix/`、`reasonix-plugin.json`、`REASONIX.md`，或 `AGENTS.md` 中的 Reasonix 段（标题行含 `网文写作工具集（Reasonix）`）
    - 存在 → 识别为 Reasonix 项目，`target_cli = reasonix`
    - 不存在 → 跳过
-10. 检查 `AGENTS.md` 中的通用段（标题行含 `网文写作工具集（通用 Agent / Web AI）`）
-   - 存在 → 识别为通用 Web AI 项目，`target_cli = generic`
+10. 检查 `AGENTS.md` 中的通用段（标题行含 `网文写作工具集（通用 Agent / Web AI）`）、或 `.trae/` 目录存在（TRAE 项目）
+   - 存在 → 识别为通用 Web AI 项目，`target_cli = generic`；`.trae/` 在场时额外记 `trae_runtime = true`（部署时多写 `.trae/rules/oh-story.md` 与项目根 `README.md`）
    - 不存在 → 跳过
 
    > 第 8-10 步只认各端**互斥**的标记。`skills/*/SKILL.md` 的 `metadata.openclaw` 不作 OpenClaw 信号：14 个 skill 全都带这个字段，而 OpenClaw / Reasonix / generic 三条 skills-only 路径部署出的 `skills/` 长得一样，用它判定会把后两者一律误认成 OpenClaw。`.agents/skills/` 同理由 Codex 与 Reasonix 共用，也不单独作准。三端真正的分辨点是各自 `AGENTS.md` 模板的标题行。
 
-11. 如 `.claude/` 或 `CLAUDE.md`、OpenCode、Codex、ZCode、OpenClaw、Reasonix、generic 标记同时存在 → 使用 AskUserQuestion 让用户选择目标环境（选项：Claude Code / OpenCode / Codex / ZCode / OpenClaw / Reasonix / 通用 Web AI 或其他 Agent / 任意组合）
+11. 如 `.claude/` 或 `CLAUDE.md`、OpenCode、Codex、ZCode、OpenClaw、Reasonix、generic 标记同时存在 → 使用 AskUserQuestion 让用户选择目标环境（选项：Claude Code / OpenCode / Codex / ZCode / OpenClaw / Reasonix / TRAE / 通用 Web AI 或其他 Agent / 任意组合）
 12. 如七类标记都不存在（全新项目）→ 使用 AskUserQuestion 让用户选择目标环境
    - 用户选择 opencode → `target_cli = opencode`，部署时创建 `opencode.json` 和 `.opencode/`
    - 用户选择 claude-code → 按现有逻辑处理
@@ -61,6 +61,7 @@ metadata: {"openclaw":{"source":"https://github.com/qin1473692580-ux/oh-story-cl
    - 用户选择 zcode → `target_cli = zcode`，部署时创建 `.zcode/`、合并根 `AGENTS.md`，不创建项目 custom agents
    - 用户选择 openclaw → `target_cli = openclaw`，部署时复制 OpenClaw 兼容 skills 到项目 `skills/`
    - 用户选择 reasonix → `target_cli = reasonix`，部署时复制 skills 到项目 `skills/`、写入 Reasonix 版 `AGENTS.md`，不创建项目 custom agents/hooks
+   - 用户选择 TRAE → `target_cli = generic`、`trae_runtime = true`，部署通用 `AGENTS.md`、项目本地 `skills/`、`.trae/rules/oh-story.md` 与项目根 `README.md`；不写平台专属 hooks/agents
    - 用户选择通用 Web AI / 其他 Agent → `target_cli = generic`，部署通用 `AGENTS.md` 与项目本地 `skills/`；不写平台专属 hooks/agents
    - 用户选择多端 → `target_cli = claude-code,opencode,codex,zcode,openclaw,reasonix,generic` 的子集（仅包含用户选择的端）
 
@@ -108,6 +109,8 @@ metadata: {"openclaw":{"source":"https://github.com/qin1473692580-ux/oh-story-cl
 | `skills/story-setup/references/reasonix/AGENTS.md.tmpl` | `AGENTS.md` | user+managed | marker/section merge | contains Reasonix story skill routing sections and solo/direct fallback | target_cli 含 reasonix |
 | repository `skills/{browser-cdp,story*}/` | `skills/{browser-cdp,story*}/` | story-setup managed for known skill names | replace known skill dirs only | 13 `SKILL.md` files exist; OpenClaw-compatible frontmatter | target_cli 含 openclaw 或 generic 或 reasonix |
 | `skills/story-setup/references/agent-references/` | `skills/story-setup/references/agent-references/` | story-setup managed | replace via full skill copy | every reference resolves | target_cli 含 openclaw 或 generic 或 reasonix |
+| `skills/story-setup/references/generic/trae-rules-oh-story.md` | `.trae/rules/oh-story.md` | story-setup managed | replace | TRAE 路由与写作守卫规则存在 | target_cli 含 generic 且 trae_runtime |
+| `skills/story-setup/references/generic/README.md.tmpl` | `README.md`（项目根） | user state | create only if absent | 给人看的项目导航 README 存在；已有用户 README 不覆盖 | target_cli 含 generic 且 trae_runtime |
 
 ### opencode.json 合并算法
 
@@ -336,7 +339,10 @@ Reasonix（DeepSeek-Reasonix CLI）当前只部署 skills 与 `AGENTS.md`，不�
 2. 复制 `skills/story-setup/references/generic/AGENTS.md.tmpl` 到项目 `AGENTS.md`，按「AGENTS.md 合并策略」合并。
 3. 复制 `skills/story-setup/references/agent-references/` 到 `skills/story-setup/references/agent-references/`，保证 narrative-writer / story-architect 等角色说明里的参考路径可解析。
 4. `.story-deployed` 的 `target_cli` 写入 `generic` 或多端组合；`references_dir` 对 generic 写 `skills/story-setup/references/agent-references`。
-5. 安装报告提示项见 Phase 3 第 11 步。
+5. **TRAE 附加产物（仅当 `trae_runtime = true`）**：
+   - 复制 `skills/story-setup/references/generic/trae-rules-oh-story.md` 到项目 `.trae/rules/oh-story.md`（story-setup managed，每次部署覆盖刷新；占位符 `{书名}` 按「模板占位符」替换）。
+   - 读取 `skills/story-setup/references/generic/README.md.tmpl`，替换占位符后写入项目根 `README.md`；**目标已存在时不覆盖**（那是用户自己写的导航），安装报告中提示手动对照。
+6. 安装报告提示项见 Phase 3 第 11 步。
 
 ### Step 8：创建部署标记
 
@@ -432,6 +438,7 @@ Reasonix（DeepSeek-Reasonix CLI）当前只部署 skills 与 `AGENTS.md`，不�
     - 检查 `skills/` 下 14 个 story skill 目录存在，且每个 `SKILL.md` 可读
     - 检查 `skills/story-setup/references/agent-references/` 下 reference 文件完整且数量与源目录一致
     - 安装报告必须提示：generic 不部署平台专属 hooks/custom agents；大纲守卫、commit 提醒、session/compact 注入等硬拦截与多 agent 协作都按 skill 内软约束或 solo/direct fallback 执行
+    - **TRAE 运行时（trae_runtime = true）额外检查**：`.trae/rules/oh-story.md` 存在且含路由表与写作硬约束；项目根 `README.md` 存在（用户已有则不覆盖，报告说明）；安装报告提示：TRAE 用 `Skill()` 等价 slash command、子代理一律 solo/direct fallback、写正文前确认 `.trae/rules/oh-story.md` 已被当前会话加载（未加载时靠 AGENTS.md 与 skill 内闸口兜底）
 12. 验证 Reasonix 部署（仅当 target_cli 含 reasonix 时）：
     - 检查 `AGENTS.md` 含 Reasonix story skill routing sections 与 solo/direct fallback 说明
     - 检查 `skills/` 下 14 个 story skill 目录存在，且每个 `SKILL.md` 可读
@@ -496,6 +503,8 @@ Reasonix（DeepSeek-Reasonix CLI）当前只部署 skills 与 `AGENTS.md`，不�
 | references/codex/hooks/story_codex_hook.py | Codex hook adapter（部署到 `.codex/hooks/story_codex_hook.py`） |
 | references/openclaw/AGENTS.md.tmpl | OpenClaw 项目根 AGENTS.md 模板（skills-only） |
 | references/generic/AGENTS.md.tmpl | 通用 Web AI / 其他 Agent 项目根 AGENTS.md 模板（skills + soft checks） |
+| references/generic/trae-rules-oh-story.md | TRAE 项目 `.trae/rules/oh-story.md` 规则模板（路由表 + 替代 hooks 的写作硬约束） |
+| references/generic/README.md.tmpl | TRAE 项目根 README 模板（给人看的导航：目录结构/续写话术/看进度） |
 | references/zcode/ | ZCode AGENTS、14 Commands、workspace config patch 与严格 JSON Hook runner |
 
 ---
