@@ -5,28 +5,29 @@
 ## 一、这是什么
 
 - 本仓库是 `qin1473692580-ux/oh-story-claudecode`（v0.7.10 发行线）与 `worldwonderer/oh-story-claudecode` 的**本地语义合并变体**，分支 `local/trae`，**不发布 GitHub**。
-- 相对 qin 基底的增量：#355 三件套（narrative-writer Bash 白名单 / 内容层-形状层拆分 / check-outline-copy.js）、#352 上下文瘦身（workflow-chapter.md 下沉）、Edge 浏览器适配（`--browser chrome|edge|auto`）、TRAE 运行时适配、**单入口主编架构**。移植明细见 `port-log.md`。
-- **单入口架构（当前）**：TRAE 全局技能目录只部署 `story`（合伙人主编路由器）；其余 13 个专岗留在本仓库 `skills\` 目录，主编按「专岗基座」路径（`f:\AI\Trae工作区\Agent&Skill规划\oh-story-trae\skills\`）读 SKILL.md 文件派单。技能列表 14 行 → 1 行；上游同步后专岗改动即合即生效，无需部署。
+- 相对 qin 基底的增量：#355 三件套（narrative-writer Bash 白名单 / 内容层-形状层拆分 / check-outline-copy.js）、#352 上下文瘦身（workflow-chapter.md 下沉）、Edge 浏览器适配（`--browser chrome|edge|auto`）、TRAE 运行时适配。
+- **架构（当前）**：**16 技能全局并存**。TRAE 全局技能目录（`~\.trae-cn\skills\`）安装全部 16 个 canonical 技能（`story` 主编 + 15 个专岗），全局命令目录（`~\.trae-cn\commands\`）安装 16 个同名命令。任一目录下均可直接调用，无需逐目录部署。
+  - 旧的**单入口架构**（全局只部署 `story`、其余 13 专岗留在仓库按文件派单）**已退役**，其部署脚本 `tools\deploy-to-trae.ps1` 已删除（该脚本会删除全局 13 技能并把 `story` 覆盖为旧版，与新模型冲突）。
+  - 全局通道**不影响**项目级资产的独立性：同一技能允许全局与项目各存一份，项目根打开时以项目版为准。
 
 ## 二、快速开始 / 重新部署
 
-```powershell
-# 干跑确认动作（部署 story + 清理旧 13 个平铺目录）
-powershell -File "f:\AI\Trae工作区\Agent&Skill规划\oh-story-trae\tools\deploy-to-trae.ps1" -DryRun
-# 实际部署 + 清理 + 刷新工作区《oh-story使用手册.md》
-powershell -File "f:\AI\Trae工作区\Agent&Skill规划\oh-story-trae\tools\deploy-to-trae.ps1"
+全局层部署由 **`story-setup` 技能**负责（不再有独立部署脚本）：
+
+```
+/story-setup      # 在会话里说「准备写书」或「配置写作环境」
 ```
 
-- 部署白名单仅 `story`；清理白名单是旧平铺的 13 个专岗目录（`/MIR` 与 `Remove-Item` 都只动白名单，不碰 TRAE 其他技能）。
-- 预检同时验证仓库内 13 个专岗 SKILL.md 齐全（路由按文件派单，缺了会路由失败）。
-- 部署后**新开会话**技能才会被加载；写作项目内另需跑一次「准备写书」（story-setup，选 TRAE）刷新项目级文件。
+- 全局层：把 16 canonical 技能复制到 `~\.trae-cn\skills\{skill-name}\`、16 命令复制到 `~\.trae-cn\commands\{name}.md`，并在 `~\.trae-cn\skill-config.json` 的 `managedSkills` 登记（来源 `oh-story-deploy`）。
+- 项目层（可选）：仅当该目录需要 `AGENTS.md` 路由表、`globs` 规则或降级 hooks 时，再在项目根跑一次原生部署。
+- 部署后**新开会话**技能才会被加载。
 
-## 二·五、单入口架构运维
+## 二·五、架构运维
 
-- **仓库挪位置**：改 `skills\story\SKILL.md`「专岗基座」一节的路径 → 重跑 deploy。主编派单失败时会报告探测路径，不会凭记忆杜撰流程。
-- **上游新增 skill**：同步后把新专岗登记进 story 调度表（一行：专岗名 + 生活化说法 + 派单文件路径），这是唯一的持续维护点（已列入上游同步核对清单）。
-- **story 自身改动**：需要重跑 deploy；专岗（其余 13 个）改动即合即生效。
-- **路由准确性**：三保险——description 语义唤起（第一道门）→ 调度表模糊词语义匹配（第二道门）→ 未命中弹两级选择框（闲聊直接放行不弹框）。
+- **兼容性前置**：待全局化的技能必须**相对自身目录**解析 `references/`、`scripts/`，不得含绝对路径、本地仓库名或用户主目录硬编码。
+- **撞名处置**：全局目录里若已有同名非本仓库技能，按「后缀 `-old`」改名让位（改名而非删除，保留回退）。
+- **上游新增 skill**：同步后由 `story-setup` 全局部署直接覆盖，**自动到位、无需登记**（这是新架构相对旧单入口架构消除同步盲点之处）。
+- **校验**：全局技能目录名与 canonical 名字集精确相等；每个 `SKILL.md` 的 frontmatter `name` 与目录名一致；每个命令的 frontmatter `name` 与文件名一致。
 
 ## 三、TRAE 运行时适配要点
 
@@ -63,17 +64,17 @@ git fetch origin ; git fetch upstream
 git checkout main ; git merge origin/main
 git checkout local/trae ; git rebase main     # 冲突按 port-log.md「冲突解决策略」
 python scripts/skill-numbering.py check       # 编号一致性
-powershell -File tools/deploy-to-trae.ps1     # 重部署
+# 全局层重新部署：在会话里跑 /story-setup（16 技能全局并存）
 # 每个在写项目重跑「准备写书」，然后新开会话
 ```
 
-- 同步后核对：上游新 PR 是否需新移植；qin 新版是否已吸收旧移植（吸收则删本地补丁）；**上游新增 skill 是否已登记进 story 调度表**（单入口架构下未登记 = 该专岗不可达）；结论登记 `port-log.md`。
+- 同步后核对：上游新 PR 是否需新移植；qin 新版是否已吸收旧移植（吸收则删本地补丁）；**上游新增 skill 由 story-setup 全局部署直接覆盖，自动到位**；结论登记 `port-log.md`。
 
 ## 六、故障排查
 
 | 症状 | 处置 |
 |---|---|
-| 新会话认不出技能 | 确认 `C:\Users\74439\.trae-cn\skills\{name}\SKILL.md` 存在；重跑 deploy 脚本；新开会话 |
+| 新会话认不出技能 | 确认 `C:\Users\74439\.trae-cn\skills\{name}\SKILL.md` 存在；重跑 `/story-setup`；新开会话 |
 | `NEEDS_CONSENT` 退出码 3 | 正常保护：先征得用户同意再加 `--yes`；详见 browser-cdp SKILL.md |
 | Edge 起不来 / 登录态坏 | `--reset` 重建 debug profile；日常 profile 必须在关闭状态下快照 |
 | `agents_version` 不匹配提示 | 项目里重跑「准备写书」；本地变体号规则见 port-log.md（qin 发同号则本地顺延） |

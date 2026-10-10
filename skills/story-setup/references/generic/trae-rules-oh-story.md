@@ -33,4 +33,4 @@ Skill 缺失时报告缺失并停止，不得用其他 skill 顶替交付（中�
 4. 中文正文全程锁中文：未授权英文句段、裸英文词必须清除（缩写/型号/URL/邮箱/文件名/代码与 `.deslop-whitelist` 登记项除外）；英文/海外意图改走 `story-globalize`，缺失即停。
 5. skill 要求 spawn `story-architect`、`narrative-writer` 等子代理时：TRAE 不注册项目 custom agents，一律 solo/direct 执行并在结果标注 `Fallback: ... -> solo`。
 6. Compact / 新会话后先读 `{书名}/追踪/上下文.md` 恢复写作状态。
-7. 版本更新：不要在本项目跑 `npx skills add` 覆盖本地变体；上游更新走本地仓库同步（git fetch + rebase）后重跑 `tools/deploy-to-trae.ps1` 与 `/story-setup`。
+7. 版本更新：不要在本项目跑 `npx skills add` 覆盖本地变体；上游更新走本地仓库同步（git fetch + rebase）后重跑 `/story-setup`。
