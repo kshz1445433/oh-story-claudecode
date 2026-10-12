@@ -14,7 +14,6 @@
  *   node qidian-rank-scraper.js --type signnewbook             # 签约作者新书榜
  *   node qidian-rank-scraper.js --type pubnewbook              # 公众作者新书榜
  *   node qidian-rank-scraper.js --type newauthor               # 新人作者新书榜
- *   node qidian-rank-scraper.js --type newsign                 # 新人签约新书榜
  *   node qidian-rank-scraper.js --type recom                   # 原创推荐榜
  *   node qidian-rank-scraper.js --type sanjiang                 # 三江推荐（/sanjiang/，非 /rank/ 路径）
  *   node qidian-rank-scraper.js --type all                     # 全部榜单
@@ -59,6 +58,11 @@ const RANK_TYPES = [
     label: "签约作者新书榜",
     mobilePath: "/rank/sign/",
     mobileLabel: "签约榜",
+    // PC 真实路径：/rank/signnewbook/ 已失效（重定向回总览页，抓出侧边栏假数据），
+    // 现榜在 /rank/signNewBkAll/（h1=签约新书榜，20 本，与移动端 /rank/sign/ 同榜）。
+    // 「新人签约新书榜」（newsign）已被起点下线（2026-10-12 实测：PC 导航无此榜、
+    // /rank/newsign/ 重定向总览页、移动端 /rank/newsign/ 404），勿再配置。
+    baseUrl: "https://www.qidian.com/rank/signNewBkAll/",
   },
   {
     id: "pubnewbook",
@@ -67,12 +71,6 @@ const RANK_TYPES = [
     mobileLabel: "新书榜",
   },
   { id: "newauthor", label: "新人作者新书榜", mobilePath: "/rank/newauthor/", mobileLabel: "新人榜" },
-  {
-    id: "newsign",
-    label: "新人签约新书榜",
-    mobilePath: "/rank/sign/",
-    mobileLabel: "签约榜",
-  },
   { id: "recom", label: "原创推荐榜", mobilePath: "/rank/rec/", mobileLabel: "推荐榜" },
   { id: "readindex", label: "阅读指数榜", mobilePath: "/rank/readindex/" },
   {

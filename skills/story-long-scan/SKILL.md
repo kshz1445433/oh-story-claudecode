@@ -68,8 +68,7 @@ metadata: {"openclaw":{"source":"https://github.com/qin1473692580-ux/oh-story-cl
 
 | 榜单 | URL | 核心字段 |
 |------|-----|----------|
-| 新人签约新书榜 | qidian.com/rank/newsign/ | 作者·题材·签约·免费/VIP·字数·总推荐·标签·简介 |
-| 签约作者新书榜 | qidian.com/rank/signnewbook/ | 已签约作者新书，新风向信号 |
+| 签约作者新书榜 | qidian.com/rank/signNewBkAll/ | 已签约作者新作风向（移动端走 /rank/sign/ 同榜） |
 | 公众作者新书榜 | qidian.com/rank/pubnewbook/ | 公众作者新书，发现潜力作者 |
 | 新人作者新书榜 | qidian.com/rank/newauthor/ | 新人作品，新人赛道风向 |
 | 三江推荐 | qidian.com/sanjiang/ | 编辑推荐，按周分组（注意：非 /rank/ 路径） |
@@ -78,6 +77,8 @@ metadata: {"openclaw":{"source":"https://github.com/qin1473692580-ux/oh-story-cl
 | 阅读指数榜 | qidian.com/rank/readindex/ | 阅读量综合指标 |
 | 收藏榜 | qidian.com/rank/collect/ | 读者关注热度 |
 | 原创推荐榜 | qidian.com/rank/recom/ | |
+
+> 下线榜：「新人签约新书榜」（newsign）已被起点下线——PC 导航无此榜、`/rank/newsign/` 重定向总览页、移动端 404（2026-10-12 实测），勿再配置。
 
 **番茄采集目标**：
 
@@ -121,7 +122,7 @@ node scripts/jjwxc-rank-scraper.js --type 12 --list-only                 # 只�
 
 > **晋江硬性要求**：必须有详情页核心指标（收藏数/营养液/积分/字数），脚本默认已补采；采集要点见 [references/scan-output-format.md](references/scan-output-format.md)。
 
-**文件命名**：`{平台}{榜单名称}_{YYYYMMDD}.md`，例：`起点新人签约新书榜_20260425.md`
+**文件命名**：`{平台}{榜单名称}_{YYYYMMDD}.md`，例：`起点签约作者新书榜_20260425.md`
 
 #### 采集质量检查（「确定数据来源」完成后必须执行）
 
