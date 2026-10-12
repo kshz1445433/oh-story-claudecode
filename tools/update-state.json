@@ -3,20 +3,20 @@
     "qin": {
       "lastTag": "v0.9.0",
       "lastSha": "18dd283",
-      "lastCheck": "2026-10-05T07:11:20.780Z"
+      "lastCheck": "2026-10-12T04:00:43.828Z"
     },
     "upstream": {
-      "lastTag": "v0.8.4",
-      "lastSha": "87f2e7e",
-      "lastCheck": "2026-10-05T07:11:21.566Z"
+      "lastTag": "v0.8.5",
+      "lastSha": "2cf7be6",
+      "lastCheck": "2026-10-12T04:00:44.703Z"
     },
     "drama": {
       "lastTag": "v0.8.1",
       "lastSha": "c2426e0",
-      "lastCheck": "2026-10-05T07:11:22.457Z"
+      "lastCheck": "2026-10-12T04:00:45.538Z"
     }
   },
-  "last_run": "2026-10-05T07:11:22.469Z",
-  "last_notice": "============================================\n!!! oh-story 上游有更新 !!!\n============================================\n仓库：zenstory-ai/oh-story-claudecode（官方线，曾用地址 worldwonderer）\n类型：新 Release\n版本：v0.7.10 -> v0.8.4\n时间：2026-09-27 17:33\n链接：https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.8.4\n--------------------------------------------\n本地处理：本部署为 TRAE 本地合并变体（local/trae 分支）,\n确认同步前不要自动 merge/rebase；同步流程见仓库 TRAE.md 第五节。\n============================================",
-  "last_notice_at": "2026-10-05T07:11:22.469Z"
+  "last_run": "2026-10-12T04:00:45.538Z",
+  "last_notice": "============================================\n!!! oh-story 上游有更新 !!!\n============================================\n仓库：zenstory-ai/oh-story-claudecode（官方线，曾用地址 worldwonderer）\n类型：新 Release\n版本：v0.8.4 -> v0.8.5\n时间：2026-10-10 19:51\n链接：https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.8.5\n--------------------------------------------\n本地处理：本部署为 TRAE 本地合并变体（local/trae 分支）,\n确认同步前不要自动 merge/rebase；同步流程见仓库 TRAE.md 第五节。\n============================================",
+  "last_notice_at": "2026-10-12T04:00:45.538Z"
 }
