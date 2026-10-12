@@ -1,4 +1,4 @@
----
+﻿---
 name: browser-cdp
 description: "Use this skill when you need to control a Chrome or Edge browser via CDP (Chrome DevTools Protocol) to reuse existing login sessions. Covers: launching the browser in debug mode, opening URLs, waiting for page load, evaluating JavaScript, taking snapshots, and extracting auth tokens. Trigger phrases: browser automation, CDP, agent-browser, 浏览器操作, 操作浏览器, Chrome CDP, Edge CDP, 复用登录态, extract token from browser."
 metadata: {"openclaw":{"requires":{"bins":["agent-browser"]},"source":"https://github.com/zenstory-ai/oh-story-claudecode"}}
@@ -180,3 +180,4 @@ timeout 30 agent-browser --cdp 9222 eval "window.location.replace('https://www.q
 | 登录态过期 | `setup-cdp-chrome.js 9222 --reset --yes --browser edge` 重新拷贝 |
 | 有多个浏览器 profile | `--profile "Profile 1"` 指定 |
 | 浏览器不会启动（30s 超时） | 试 `--reset`；检查端口冲突；查看 `~/edge-debug-profile/`（或 `~/chrome-debug-profile/`）是否损坏 |
+
